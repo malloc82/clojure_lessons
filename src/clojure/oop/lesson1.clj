@@ -10,11 +10,26 @@ A message specifies one of the operations, but unlike a procedure,
 does not describe how the operation should be carried our. C++ is
 an example of an object-oriented programming langaues."
 
+(defprotocol IObject
+  (send-msg [this msg args]))
+
+(extend-protocol IObject
+  clojure.lang.PersistentArrayMap
+  (send-msg [obj msg-type args]
+    (let [op (get-in obj [:ops msg-type]
+                     (get-in obj [:ops :default]))]
+      (apply op obj args))))
+
+(defn get-methods [obj]
+  (keys (:ops obj)))
+
 (def my-object
   {:ops {:add-score (fn [state score]
                       (update-in state [:data :scores] conj score))
          :sum-scores (fn [state]
-                       (apply + (get-in state [:data :scores])))}
+                       (apply + (get-in state [:data :scores])))
+         :default (fn [state & rest]
+                    (println "CANNOT EXECUTE"))}
    :data {:scores []}})
 
 (def my-object2
@@ -24,23 +39,24 @@ an example of an object-oriented programming langaues."
                 (/ (apply + scores)
                    (count scores))))))
 
-(defn send-msg [obj msg-type & args]
+#_(defn send-msg [obj msg-type & args]
   (let [op (get-in obj [:ops msg-type])]
     (apply op obj args)))
 
-(-> my-object
-    (send-msg :add-score 42)
-    (send-msg :add-score 1)
-    (send-msg :sum-scores))
+(let [op :add-score]
+  (-> my-object
+      (send-msg op [42])
+      (send-msg op [1])
+      (send-msg :sum-score [])))
 
 (let [op :add-score]
-  )
+  (-> my-object2
+    (send-msg op [42])
+    (send-msg op [1])
+    (send-msg :avg-score [])
+    #_int))
 
-(-> my-object2
-    (send-msg :add-score 42)
-    (send-msg :add-score 1)
-    (send-msg :avg-score)
-    int)
+
 
 
 ;; clojure version
