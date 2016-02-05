@@ -1,6 +1,9 @@
 (ns oop.lesson1
   (:use clojure.core
-        [clojure.pprint :only [pprint]]))
+        [clojure.pprint :only [pprint]])
+  (:require [clojure.core.async
+             :as async
+             :refer [go <! >! chan close! <!! >!! thread]]))
 
 "A schematic paradigm for computer programming in which the linear
 concepts of procedures and tasks are replaced by the concepts of
@@ -56,11 +59,7 @@ an example of an object-oriented programming langaues."
     (send-msg :avg-score [])
     #_int))
 
-
-
-
 ;; clojure version
-
 
 ;; This OOP style gives away being data driven
 (defprotocol IMyObject
@@ -77,3 +76,63 @@ an example of an object-oriented programming langaues."
 (-> (->MyObject [])
     (add-score 42)
     (add-score 1))
+
+
+;; oop async style
+;; couple object with states and commands
+
+
+(defn print-obj [prefix]
+  (let [c (chan)]
+    (thread
+      (loop []
+        (when-some [[cmd data] (<!! c)]
+          (case cmd
+            :print (do (print prefix data)
+                       (recur))
+            (recur)))))
+    c))
+
+(let [o (print-obj "Printed -> ")]
+  (>!! o [:print 42])
+  (close! o))
+
+(defn scoring-obj []
+  (let [c (chan)]
+    (thread
+      ;; "Actor" block
+      (loop [scores []]
+        (when-some [[cmd data] (<!! c)]
+          (println "Got Command " cmd data)
+          (case cmd
+            :add-score (recur (conj scores data))
+            :sum-scores (do (>!! data (apply + scores))
+                            (recur scores))
+            (do
+              (println "Bad Command : " cmd data)
+              (recur scores))))))
+    c))
+
+(let [o (scoring-obj)]
+  (>!! o [:add-score 42])
+  (>!! o [:add-score 1])
+  (let [c (chan)]
+    (>!! o [:sum-scores c])
+    (println "Summed: " (<!! c)))
+  (close! o))
+
+;; dispatch
+
+(let [impls (atom {})]
+  (defn add-scores [this val]
+    ((@impls (type this)) this val))
+  (defn extend-add-scores [tp fn]
+    (swap! impls assoc tp fn)))
+
+(extend-add-scores (type []) conj)
+(extend-add-scores (type []) (fn [acc i]
+                               (assoc acc i i)))
+
+(add-scores {} 1)
+
+;; defprotocol, function itself owns the method, not object
